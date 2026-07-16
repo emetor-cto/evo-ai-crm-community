@@ -39,6 +39,10 @@ module PipelineSerializer
       updated_at: pipeline.updated_at&.iso8601
     }
 
+    # Board header "Valor Total" — compute once on the shell payload so the UI
+    # does not depend on every paginated card being loaded.
+    result[:total_value] = pipeline.total_value if include_services_info
+
     # Include stages if loaded
     if include_stages && pipeline.association(:pipeline_stages).loaded?
       # Order stages by position

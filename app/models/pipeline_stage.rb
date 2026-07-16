@@ -38,7 +38,7 @@ class PipelineStage < ApplicationRecord
   before_destroy :reassign_conversations_to_first_stage
 
   def item_count
-    pipeline_items.count
+    pipeline_items.active.count
   end
 
   def next_stage

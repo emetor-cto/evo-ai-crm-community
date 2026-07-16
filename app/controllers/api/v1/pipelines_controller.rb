@@ -47,14 +47,15 @@ class Api::V1::PipelinesController < Api::V1::BaseController
   end
 
   def show
+    # Board shell only — stages + item_count. Items are loaded per-stage via
+    # GET /pipelines/:id/pipeline_items?stage_id=&page= to keep large boards
+    # (hundreds of Prospects) from timing out / freezing the browser.
     success_response(
       data: PipelineSerializer.serialize(
         @pipeline,
         include_stages: true,
-        include_items: true,
-        include_tasks_info: true,
-        include_services_info: true,
-        include_labels: true
+        include_items: false,
+        include_services_info: true
       ),
       message: 'Pipeline retrieved successfully'
     )
@@ -219,29 +220,10 @@ class Api::V1::PipelinesController < Api::V1::BaseController
   private
 
   def fetch_pipeline
-    @pipeline = Pipeline.all
-                          .includes(
-                            :created_by,
-                            pipeline_stages: [],
-                            pipeline_items: [
-                              :pipeline_stage,
-                              :contact,
-                              :tasks,
-                              conversation: [
-                                :contact,
-                                :assignee,
-                                :team,
-                                :inbox,
-                                messages: [:attachments, :sender]
-                              ]
-                            ]
-                          )
-                          .preload(
-                            pipeline_items: {
-                              conversation: :messages
-                            }
-                          )
-                          .find(params[:id])
+    # Light preload for show/update/destroy. Full item graphs belong on
+    # pipeline_items#index (paginated).
+    @pipeline = Pipeline.includes(:created_by, :pipeline_stages, :pipeline_items)
+                        .find(params[:id])
   end
 
   def fetch_pipeline_for_stats

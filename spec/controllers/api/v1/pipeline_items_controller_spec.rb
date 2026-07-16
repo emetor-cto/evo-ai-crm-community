@@ -266,4 +266,45 @@ RSpec.describe Api::V1::PipelineItemsController, type: :controller do
       end
     end
   end
+
+  describe 'GET #index pagination' do
+    before do
+      5.times do |i|
+        PipelineItem.create!(
+          pipeline: pipeline,
+          pipeline_stage: stage_one,
+          contact: Contact.create!(name: "Lead #{i}", email: "lead#{i}@example.com"),
+          assigned_by: user
+        )
+      end
+    end
+
+    it 'paginates items and returns pagination meta' do
+      get :index, params: { pipeline_id: pipeline.id, stage_id: stage_one.id, page: 1, per_page: 2 }
+
+      expect(response).to have_http_status(:ok)
+      body = response.parsed_body
+      expect(body['data'].size).to eq(2)
+      expect(body.dig('meta', 'pagination', 'page')).to eq(1)
+      expect(body.dig('meta', 'pagination', 'page_size')).to eq(2)
+      expect(body.dig('meta', 'pagination', 'has_next_page')).to be(true)
+      expect(body.dig('meta', 'pagination', 'total')).to be >= 6
+    end
+
+    it 'returns the full active set when pagination params are omitted (legacy callers)' do
+      get :index, params: { pipeline_id: pipeline.id }
+
+      expect(response).to have_http_status(:ok)
+      body = response.parsed_body
+      expect(body['data'].size).to be >= 6
+      expect(body.dig('meta', 'pagination')).to be_nil
+    end
+
+    it 'filters by stage_id' do
+      get :index, params: { pipeline_id: pipeline.id, stage_id: stage_two.id, page: 1, per_page: 20 }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body['data']).to eq([])
+    end
+  end
 end

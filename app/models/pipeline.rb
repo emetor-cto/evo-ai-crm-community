@@ -72,7 +72,7 @@ class Pipeline < ApplicationRecord
   end
   
   def item_count
-    pipeline_items.count
+    pipeline_items.active.count
   end
 
   def stage_counts

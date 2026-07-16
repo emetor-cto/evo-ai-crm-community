@@ -9,24 +9,39 @@ class Api::V1::PipelineItemsController < Api::V1::BaseController
   before_action :ensure_authorized_user
 
   def index
+    # Kanban loads items per stage with page/per_page. Keep includes lean —
+    # never preload all conversation messages (that was the board timeout).
     @pipeline_items = @pipeline.pipeline_items.includes(
-      :conversation,
       :pipeline_stage,
+      :contact,
+      :tasks,
       conversation: [
         :contact,
         :assignee,
         :team,
-        messages: [:attachments, :sender]
+        :inbox
       ]
     )
 
     apply_filters
     apply_sorting
-    
-    success_response(
-      data: PipelineItemSerializer.serialize_collection(@pipeline_items, include_entity: true),
-      message: 'Pipeline items retrieved successfully'
-    )
+
+    # Paginate only when the client asks for it. Legacy callers
+    # (useContactPipelines, conversation enrichment) omit page params and still
+    # need the full active set — defaulting to 20 would silently drop cards.
+    if pagination_requested?
+      apply_pagination
+      paginated_response(
+        data: serialize_pipeline_items_collection(@pipeline_items),
+        collection: @pipeline_items,
+        message: 'Pipeline items retrieved successfully'
+      )
+    else
+      success_response(
+        data: serialize_pipeline_items_collection(@pipeline_items),
+        message: 'Pipeline items retrieved successfully'
+      )
+    end
   end
 
   # rubocop:disable Metrics/MethodLength, Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
@@ -656,15 +671,6 @@ class Api::V1::PipelineItemsController < Api::V1::BaseController
     @pipeline_items.where(pipeline_stage_id: params[:stage_id])
   end
 
-  def search_conversations
-    search_term = "%#{params[:search]}%"
-    @pipeline_items.joins(conversation: :contact)
-                           .where(
-                             'contacts.name ILIKE ? OR contacts.email ILIKE ? OR conversations.id::text ILIKE ?',
-                             search_term, search_term, search_term
-                           )
-  end
-
   def stage_statistics
     @pipeline.pipeline_stages.map do |stage|
       {
@@ -720,7 +726,51 @@ class Api::V1::PipelineItemsController < Api::V1::BaseController
     end
 
     @pipeline_items = filter_by_stage if params[:stage_id].present?
-    @pipeline_items = search_conversations if params[:search].present?
+
+    conversation_filters = {}
+    conversation_filters[:assignee_id] = params[:assignee_id] if params[:assignee_id].present?
+    conversation_filters[:status] = params[:conversation_status] if params[:conversation_status].present?
+
+    if params[:search].present?
+      search_term = "%#{params[:search]}%"
+      # Single join covers search + optional assignee/status filters (avoid
+      # duplicate conversation joins that inflate Kaminari totals).
+      @pipeline_items = @pipeline_items.joins(conversation: :contact)
+                                       .where(
+                                         'contacts.name ILIKE ? OR contacts.email ILIKE ? OR contacts.phone_number ILIKE ? OR conversations.display_id::text ILIKE ?',
+                                         search_term, search_term, search_term, search_term
+                                       )
+      @pipeline_items = @pipeline_items.where(conversations: conversation_filters) if conversation_filters.any?
+    elsif conversation_filters.any?
+      @pipeline_items = @pipeline_items.joins(:conversation).where(conversations: conversation_filters)
+    end
+  end
+
+  def pagination_requested?
+    params[:page].present? ||
+      params[:per_page].present? ||
+      params[:page_size].present? ||
+      params[:pageSize].present?
+  end
+
+  def serialize_pipeline_items_collection(items)
+    task_counts = PipelineItemSerializer.task_counts_for(items)
+    labels = Label.all.to_a
+    labels_by_title = labels.index_by { |label| label.title.to_s.downcase }
+    labels_by_id = labels.index_by { |label| label.id.to_s }
+
+    items.map do |item|
+      PipelineItemSerializer.serialize(
+        item,
+        include_entity: true,
+        include_tasks_info: true,
+        include_services_info: true,
+        include_labels: true,
+        labels_by_title: labels_by_title,
+        labels_by_id: labels_by_id,
+        task_counts_by_item: task_counts
+      )
+    end
   end
 
   def temporal_range(period)

@@ -153,6 +153,13 @@ Rails.application.routes.draw do
 
       resources :labels, only: [:index, :show, :create, :update, :destroy], controller: 'labels'
 
+      resources :dashboard_checklists, only: [:index, :show, :create, :update, :destroy], controller: 'dashboard_checklists' do
+        collection do
+          get :today
+          post 'items/:item_id/toggle', action: :toggle_item
+        end
+      end
+
       resources :agent_bots, only: [:index, :create, :show, :update, :destroy], controller: 'agent_bots' do
         delete :avatar, on: :member
       end

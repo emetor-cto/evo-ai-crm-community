@@ -128,7 +128,7 @@ class Api::V1::DashboardChecklistsController < Api::V1::BaseController
   def fetch_checklist
     @checklist = DashboardChecklist.includes(:items, :assignees).find(params[:id])
   rescue ActiveRecord::RecordNotFound
-    error_response(ApiErrorCodes::RESOURCE_NOT_FOUND, 'Dashboard checklist not found', status: :not_found)
+    error_response(ApiErrorCodes::RESOURCE_NOT_FOUND, 'Dashboard checklist not found', status: :not_found) and return
   end
 
   def ensure_can_manage!
@@ -139,7 +139,7 @@ class Api::V1::DashboardChecklistsController < Api::V1::BaseController
       ApiErrorCodes::FORBIDDEN,
       'You are not allowed to manage dashboard checklists',
       status: :forbidden
-    )
+    ) and return
   end
 
   def checklist_attributes

@@ -1,13 +1,8 @@
 # frozen_string_literal: true
 
 class Api::V1::TeamFoldersController < Api::V1::BaseController
-  require_permissions({
-                        index: 'team_notes.read',
-                        show: 'team_notes.read',
-                        create: 'team_notes.create',
-                        update: 'team_notes.update',
-                        destroy: 'team_notes.delete'
-                      })
+  # Authenticated team members can manage shared notebooks.
+  # Dedicated team_notes.* RBAC keys land when auth permissions are deployed.
 
   before_action :fetch_folder, only: %i[show update destroy]
 

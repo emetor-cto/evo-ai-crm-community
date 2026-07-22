@@ -1,0 +1,63 @@
+# Ephemeral stack to run Notebook RSpec without a full CRM rebuild.
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: evolution_test
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d evolution_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  test:
+    image: ruby:3.4.4-bookworm
+    working_dir: /app
+    volumes:
+      - ./:/app
+      - crm_test_bundle:/usr/local/bundle
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      RAILS_ENV: test
+      ENCRYPTION_KEY: test-encryption-key-for-fernet!!
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USERNAME: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DATABASE: evolution_test
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY_BASE: test-secret-key-base-for-rspec-only
+    command:
+      - bash
+      - -lc
+      - |
+        set -euo pipefail
+        apt-get update -qq
+        apt-get install -y -qq --no-install-recommends \
+          build-essential libpq-dev libvips-dev git curl pkg-config shared-mime-info
+        gem install bundler -v 2.5.11
+        bundle config set --local path '/usr/local/bundle'
+        bundle install -j 4
+        bundle exec rails db:drop db:create db:schema:load
+        bundle exec rails db:migrate
+        bundle exec rspec \
+          spec/models/team_notebook_spec.rb \
+          spec/requests/api/v1/team_notebook_spec.rb \
+          --format documentation
+
+volumes:
+  crm_test_bundle:

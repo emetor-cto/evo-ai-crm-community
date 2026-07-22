@@ -166,6 +166,13 @@ Rails.application.routes.draw do
 
       resources :canned_responses, only: [:index, :show, :create, :update, :destroy], controller: 'canned_responses'
 
+      resources :team_folders, only: [:index, :show, :create, :update, :destroy], controller: 'team_folders'
+      resources :team_documents, only: [:index, :show, :create, :update, :destroy], controller: 'team_documents' do
+        member do
+          post :attach
+        end
+      end
+
       # Dedicated, account-scoped message templates CRUD (global + channel-bound).
       # Channel-bound ops pass inbox_id; Meta sync stays on the inbox routes. (EVO-1716)
       resources :message_templates, only: [:index, :show, :create, :update, :destroy], controller: 'message_templates'

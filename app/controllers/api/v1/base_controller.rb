@@ -34,6 +34,8 @@ class Api::V1::BaseController < Api::BaseController
       @messages
       @notes
       @moderations
+      @team_documents
+      @products
     ].each do |var_name|
       var = instance_variable_get(var_name)
       next unless var.respond_to?(:page)

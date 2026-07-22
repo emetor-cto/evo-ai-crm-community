@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_07_01_120000) do
+ActiveRecord::Schema[7.1].define(version: 2026_07_22_180000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_stat_statements"
   enable_extension "pg_trgm"
@@ -552,6 +552,47 @@ ActiveRecord::Schema[7.1].define(version: 2026_07_01_120000) do
     t.string "sidebar_menu", default: "conversations"
     t.string "sidebar_position", default: "after"
     t.index ["user_id"], name: "index_dashboard_apps_on_user_id"
+  end
+
+  create_table "dashboard_checklist_assignments", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "dashboard_checklist_id", null: false
+    t.uuid "user_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["dashboard_checklist_id", "user_id"], name: "index_dashboard_checklist_assignments_unique", unique: true
+    t.index ["dashboard_checklist_id"], name: "idx_on_dashboard_checklist_id_602a303c98"
+    t.index ["user_id"], name: "index_dashboard_checklist_assignments_on_user_id"
+  end
+
+  create_table "dashboard_checklist_completions", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "dashboard_checklist_item_id", null: false
+    t.uuid "user_id", null: false
+    t.date "completed_on", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["dashboard_checklist_item_id", "user_id", "completed_on"], name: "index_dashboard_checklist_completions_unique", unique: true
+    t.index ["dashboard_checklist_item_id"], name: "index_dashboard_checklist_completions_on_item_id"
+    t.index ["user_id", "completed_on"], name: "idx_on_user_id_completed_on_9a550168a3"
+  end
+
+  create_table "dashboard_checklist_items", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "dashboard_checklist_id", null: false
+    t.string "title", limit: 255, null: false
+    t.integer "position", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["dashboard_checklist_id", "position"], name: "index_dashboard_checklist_items_on_checklist_and_position"
+    t.index ["dashboard_checklist_id"], name: "index_dashboard_checklist_items_on_dashboard_checklist_id"
+  end
+
+  create_table "dashboard_checklists", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.string "title", limit: 255, null: false
+    t.boolean "active", default: true, null: false
+    t.uuid "created_by_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["active"], name: "index_dashboard_checklists_on_active"
+    t.index ["created_by_id"], name: "index_dashboard_checklists_on_created_by_id"
   end
 
   create_table "data_imports", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -1242,6 +1283,34 @@ ActiveRecord::Schema[7.1].define(version: 2026_07_01_120000) do
     t.index ["name"], name: "index_tags_on_name", unique: true
   end
 
+  create_table "team_documents", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.string "title", limit: 255, default: "Untitled", null: false
+    t.uuid "folder_id"
+    t.jsonb "content_json", default: [], null: false
+    t.text "content_text", default: "", null: false
+    t.integer "position", default: 0, null: false
+    t.uuid "created_by_id", null: false
+    t.uuid "updated_by_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["created_by_id"], name: "index_team_documents_on_created_by_id"
+    t.index ["folder_id", "position"], name: "index_team_documents_on_folder_and_position"
+    t.index ["folder_id"], name: "index_team_documents_on_folder_id"
+    t.index ["updated_by_id"], name: "index_team_documents_on_updated_by_id"
+  end
+
+  create_table "team_folders", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.string "name", limit: 255, null: false
+    t.uuid "parent_id"
+    t.integer "position", default: 0, null: false
+    t.uuid "created_by_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["created_by_id"], name: "index_team_folders_on_created_by_id"
+    t.index ["parent_id", "position"], name: "index_team_folders_on_parent_and_position"
+    t.index ["parent_id"], name: "index_team_folders_on_parent_id"
+  end
+
   create_table "team_members", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.uuid "team_id", null: false
     t.uuid "user_id", null: false
@@ -1376,6 +1445,9 @@ ActiveRecord::Schema[7.1].define(version: 2026_07_01_120000) do
   add_foreign_key "contact_companies", "contacts", column: "company_id"
   add_foreign_key "crm_forms", "pipeline_stages", column: "default_stage_id"
   add_foreign_key "crm_forms", "pipelines", column: "default_pipeline_id"
+  add_foreign_key "dashboard_checklist_assignments", "dashboard_checklists"
+  add_foreign_key "dashboard_checklist_completions", "dashboard_checklist_items"
+  add_foreign_key "dashboard_checklist_items", "dashboard_checklists"
   add_foreign_key "data_privacy_consents", "users"
   add_foreign_key "facebook_comment_moderations", "conversations"
   add_foreign_key "facebook_comment_moderations", "messages"
@@ -1405,6 +1477,8 @@ ActiveRecord::Schema[7.1].define(version: 2026_07_01_120000) do
   add_foreign_key "stage_movements", "pipeline_items"
   add_foreign_key "stage_movements", "pipeline_stages", column: "from_stage_id"
   add_foreign_key "stage_movements", "pipeline_stages", column: "to_stage_id"
+  add_foreign_key "team_documents", "team_folders", column: "folder_id", on_delete: :nullify
+  add_foreign_key "team_folders", "team_folders", column: "parent_id", on_delete: :nullify
   add_foreign_key "user_roles", "roles"
   add_foreign_key "user_roles", "users"
   add_foreign_key "user_roles", "users", column: "granted_by_id"

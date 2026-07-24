@@ -1,6 +1,10 @@
 class Api::V1::PipelinesController < Api::V1::BaseController
   include Api::V1::ResourceLimitsHelper
 
+  # team_ids is not a DB column, so default wrap_parameters would leave it at the
+  # request root and our sync would miss it. Force it into params[:pipeline].
+  wrap_parameters :pipeline, include: Pipeline.attribute_names + %w[team_ids]
+
   require_permissions({
     index: 'pipelines.read',
     show: 'pipelines.read',
@@ -359,11 +363,15 @@ class Api::V1::PipelinesController < Api::V1::BaseController
 
   def sync_pipeline_teams!(pipeline, team_ids)
     if pipeline.visibility_team?
-      ids = Array(team_ids == :not_provided ? pipeline.team_ids : team_ids)
-      valid_ids = Team.where(id: ids).pluck(:id)
-
-      if valid_ids.empty?
+      ids = Array(team_ids == :not_provided ? pipeline.team_ids : team_ids).map(&:to_s).uniq
+      if ids.blank?
         pipeline.errors.add(:team_ids, 'must include at least one team')
+        raise ActiveRecord::RecordInvalid, pipeline
+      end
+
+      valid_ids = Team.where(id: ids).pluck(:id).map(&:to_s)
+      if valid_ids.empty?
+        pipeline.errors.add(:team_ids, 'must reference existing teams')
         raise ActiveRecord::RecordInvalid, pipeline
       end
 

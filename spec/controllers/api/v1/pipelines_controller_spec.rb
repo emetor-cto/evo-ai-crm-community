@@ -46,6 +46,18 @@ RSpec.describe Api::V1::PipelinesController, type: :controller do
       expect(body.dig('data', 'team_ids')).to contain_exactly(team.id)
     end
 
+    it 'reads team_ids from root params when wrap_parameters leaves them outside pipeline' do
+      allow(controller).to receive(:params).and_return(
+        ActionController::Parameters.new(
+          id: pipeline.id,
+          pipeline: { visibility: 'team', name: pipeline.name, pipeline_type: pipeline.pipeline_type },
+          team_ids: [team.id]
+        )
+      )
+
+      expect(controller.send(:extract_team_ids)).to eq([team.id.to_s])
+    end
+
     it 'rejects team visibility without teams' do
       patch :update, params: {
         id: pipeline.id,

@@ -339,11 +339,22 @@ class Api::V1::PipelinesController < Api::V1::BaseController
   end
 
   def extract_team_ids
+    # team_ids is not a Pipeline column, so wrap_parameters may leave it at the
+    # root instead of nesting under params[:pipeline]. Accept either shape.
     pipeline_payload = params[:pipeline]
-    return :not_provided if pipeline_payload.blank?
-    return :not_provided unless pipeline_payload.key?(:team_ids) || pipeline_payload.key?('team_ids')
+    raw =
+      if pipeline_payload.present? && (pipeline_payload.key?(:team_ids) || pipeline_payload.key?('team_ids'))
+        pipeline_payload[:team_ids]
+      elsif params.key?(:team_ids) || params.key?('team_ids')
+        params[:team_ids]
+      else
+        return :not_provided
+      end
 
-    Array(pipeline_payload[:team_ids]).map(&:presence).compact.uniq
+    Array(raw).flat_map { |value| value.is_a?(Array) ? value : [value] }
+              .map { |value| value.presence&.to_s }
+              .compact
+              .uniq
   end
 
   def sync_pipeline_teams!(pipeline, team_ids)

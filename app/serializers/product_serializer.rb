@@ -20,6 +20,7 @@ module ProductSerializer
       description: product.description,
       sku: product.sku,
       default_price: product.default_price.to_f,
+      commission: product.commission.to_f,
       currency: product.currency,
       purchase_url: product.purchase_url,
       status: product.status,

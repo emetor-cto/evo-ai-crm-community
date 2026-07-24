@@ -143,6 +143,7 @@ module PipelineItemSerializer
       
       result[:services_info] = {
         total_value: total_value,
+        total_commission: pipeline_item.services_total_commission,
         currency: currency,
         formatted_total: pipeline_item.formatted_services_total(currency),
         services_count: services.length,
@@ -152,6 +153,8 @@ module PipelineItemSerializer
             name: service['name'],
             value: service['value'].to_f
           }
+          service_info[:commission] = service['commission'].to_f if service['commission'].present?
+          service_info[:product_id] = service['product_id'] if service['product_id'].present?
           service_info[:service_definition_id] = service['service_definition_id'] if service['service_definition_id'].present?
           service_info
         end

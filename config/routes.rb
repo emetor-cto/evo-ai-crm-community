@@ -574,6 +574,9 @@ Rails.application.routes.draw do
 
       post 'pipeline_tasks/for_conversation', to: 'pipeline_tasks#for_conversation'
 
+      resources :pipeline_task_templates, only: [:index, :show, :create, :update, :destroy],
+                                         controller: 'pipeline_task_templates'
+
       resources :pipelines, controller: 'pipelines' do
         collection do
           get :stats

@@ -128,6 +128,14 @@ class PipelineItem < ApplicationRecord
     end
   end
 
+  def services_total_commission
+    return 0 unless custom_fields&.dig('services').is_a?(Array)
+
+    custom_fields['services'].sum do |service|
+      service['commission'].to_f
+    end
+  end
+
   def pending_tasks_count
     tasks.pending.count
   end
@@ -155,15 +163,25 @@ class PipelineItem < ApplicationRecord
       service_name = service['name'].to_s.strip
       service_value = service['value']&.to_f || 0.0
       service_definition_id = service['service_definition_id']
+      product_id = service['product_id']
+      commission = service['commission']
 
       normalized_service = {
         'name' => service_name,
         'value' => service_value.round(2).to_s
       }
 
+      if product_id.present?
+        normalized_service['product_id'] = product_id.to_s
+      end
+
+      if commission.present?
+        normalized_service['commission'] = commission.to_f.round(2).to_s
+      end
+
       if service_definition_id.present?
         normalized_service['service_definition_id'] = service_definition_id.to_s
-      else
+      elsif product_id.blank?
         catalog_service = find_or_create_catalog_service(service_name, service_value)
         normalized_service['service_definition_id'] = catalog_service.id.to_s if catalog_service
       end

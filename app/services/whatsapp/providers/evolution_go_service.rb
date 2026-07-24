@@ -20,10 +20,25 @@ class Whatsapp::Providers::EvolutionGoService < Whatsapp::Providers::BaseService
   end
 
   def send_template(phone_number, template_info)
-    # Evolution Go API doesn't support template messages in the same way
-    # For now, we'll send a regular text message
+    # Evolution Go API doesn't support Meta-style template messages.
+    # Prefer already-rendered message content; fall back to a plain-text best effort.
     Rails.logger.warn "Evolution Go API doesn't support template messages, sending as text"
-    send_text_message(phone_number, build_template_text(template_info))
+    payload = if @message&.content.present?
+                @message
+              else
+                build_template_text(template_info)
+              end
+    send_text_message(phone_number, payload)
+  end
+
+  def build_template_text(template_info)
+    info = template_info.is_a?(Hash) ? template_info.with_indifferent_access : {}
+    text = info[:name].presence || 'Template Message'
+    Array(info[:parameters]).each_with_index do |param, index|
+      value = param.is_a?(Hash) ? (param[:text] || param['text'] || param) : param
+      text = text.gsub("{{#{index + 1}}}", value.to_s)
+    end
+    text
   end
 
   def sync_templates

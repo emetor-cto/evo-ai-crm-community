@@ -10,7 +10,7 @@ module Products
     MAX_ITEMS = 500
     SCALAR_ATTRS = %i[
       name slug kind description sku
-      default_price currency purchase_url
+      default_price commission currency purchase_url
       status stock_quantity
     ].freeze
 

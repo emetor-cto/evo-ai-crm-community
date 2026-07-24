@@ -30,6 +30,7 @@ module PipelineSerializer
       description: pipeline.description,
       pipeline_type: pipeline.pipeline_type,
       visibility: pipeline.visibility,
+      team_ids: pipeline.team_ids,
       is_active: pipeline.is_active,
       is_default: pipeline.is_default,
       custom_fields: pipeline.custom_fields || {},

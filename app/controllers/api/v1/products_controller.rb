@@ -172,7 +172,7 @@ class Api::V1::ProductsController < Api::V1::BaseController
       .require(:product)
       .permit(
         :name, :slug, :kind, :description, :sku,
-        :default_price, :currency, :purchase_url,
+        :default_price, :commission, :currency, :purchase_url,
         :status, :stock_quantity,
         metadata: {},
         variants_attributes: [

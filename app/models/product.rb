@@ -48,6 +48,7 @@ class Product < ApplicationRecord
   validates :kind, presence: true, inclusion: { in: KINDS }
   validates :status, presence: true, inclusion: { in: STATUSES }
   validates :default_price, presence: true, numericality: { greater_than_or_equal_to: 0 }
+  validates :commission, presence: true, numericality: { greater_than_or_equal_to: 0 }
   validates :currency, presence: true, inclusion: { in: ALLOWED_CURRENCIES }
   validates :sku, uniqueness: true, allow_blank: true
   validates :stock_quantity, numericality: { greater_than_or_equal_to: 0, only_integer: true }, allow_nil: true
@@ -74,6 +75,7 @@ class Product < ApplicationRecord
       name: name,
       kind: kind,
       default_price: default_price.to_f,
+      commission: commission.to_f,
       currency: currency,
       purchase_url: purchase_url,
       description: description.to_s.truncate(280)

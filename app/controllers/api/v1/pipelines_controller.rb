@@ -32,7 +32,7 @@ class Api::V1::PipelinesController < Api::V1::BaseController
     @pipelines = Pipeline.all
                         .accessible_by(Current.user)
                         .active
-                        .includes(pipeline_stages: [], pipeline_items: [])
+                        .includes(:teams, pipeline_stages: [], pipeline_items: [])
                         .order(:name)
 
     success_response(
@@ -65,10 +65,14 @@ class Api::V1::PipelinesController < Api::V1::BaseController
     # Check if user can create pipelines at the account level
     authorize Pipeline, :create?
 
+    team_ids = extract_team_ids
     @pipeline = Pipeline.new(pipeline_params.merge(created_by: Current.user))
 
     ActiveRecord::Base.transaction do
       @pipeline.save!
+      # Empty arrays are often stripped from params; treat missing team_ids as []
+      # when creating with team visibility so validation still runs.
+      sync_pipeline_teams!(@pipeline, team_ids == :not_provided ? [] : team_ids)
 
       # Create custom stages if provided, otherwise create default stages
       if params[:stages].present?
@@ -93,19 +97,40 @@ class Api::V1::PipelinesController < Api::V1::BaseController
   end
 
   def update
-    if @pipeline.update(pipeline_params)
+    team_ids = extract_team_ids
+    previous_visibility = @pipeline.visibility
+
+    ActiveRecord::Base.transaction do
+      @pipeline.update!(pipeline_params)
+
+      if @pipeline.visibility_team?
+        # Rails may drop empty team_ids arrays from params. If visibility just
+        # switched to team and no team_ids arrived, treat as an empty selection.
+        effective_ids = if team_ids != :not_provided
+                          team_ids
+                        elsif previous_visibility.to_s == 'team'
+                          :keep
+                        else
+                          []
+                        end
+
+        sync_pipeline_teams!(@pipeline, effective_ids) unless effective_ids == :keep
+      elsif team_ids != :not_provided || @pipeline.saved_change_to_visibility?
+        @pipeline.team_ids = []
+      end
+
       success_response(
         data: PipelineSerializer.serialize(@pipeline, include_stages: true),
         message: 'Pipeline updated successfully'
       )
-    else
-      error_response(
-        ApiErrorCodes::VALIDATION_ERROR,
-        'Validation failed',
-        details: @pipeline.errors.full_messages,
-        status: :unprocessable_entity
-      )
     end
+  rescue ActiveRecord::RecordInvalid => e
+    error_response(
+      ApiErrorCodes::VALIDATION_ERROR,
+      'Validation failed',
+      details: e.record&.errors&.full_messages.presence || e.message,
+      status: :unprocessable_entity
+    )
   end
 
   def destroy
@@ -222,7 +247,7 @@ class Api::V1::PipelinesController < Api::V1::BaseController
   def fetch_pipeline
     # Light preload for show/update/destroy. Full item graphs belong on
     # pipeline_items#index (paginated).
-    @pipeline = Pipeline.includes(:created_by, :pipeline_stages, :pipeline_items)
+    @pipeline = Pipeline.includes(:created_by, :teams, :pipeline_stages, :pipeline_items)
                         .find(params[:id])
   end
 
@@ -268,6 +293,7 @@ class Api::V1::PipelinesController < Api::V1::BaseController
       :description,
       :pipeline_type,
       :visibility,
+      :is_active,
       custom_fields: {}
     )
 
@@ -310,6 +336,30 @@ class Api::V1::PipelinesController < Api::V1::BaseController
     end
 
     permitted
+  end
+
+  def extract_team_ids
+    pipeline_payload = params[:pipeline]
+    return :not_provided if pipeline_payload.blank?
+    return :not_provided unless pipeline_payload.key?(:team_ids) || pipeline_payload.key?('team_ids')
+
+    Array(pipeline_payload[:team_ids]).map(&:presence).compact.uniq
+  end
+
+  def sync_pipeline_teams!(pipeline, team_ids)
+    if pipeline.visibility_team?
+      ids = Array(team_ids == :not_provided ? pipeline.team_ids : team_ids)
+      valid_ids = Team.where(id: ids).pluck(:id)
+
+      if valid_ids.empty?
+        pipeline.errors.add(:team_ids, 'must include at least one team')
+        raise ActiveRecord::RecordInvalid, pipeline
+      end
+
+      pipeline.team_ids = valid_ids
+    else
+      pipeline.team_ids = []
+    end
   end
 
   def create_custom_stages(stages_data)

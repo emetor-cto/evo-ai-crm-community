@@ -9,13 +9,22 @@ class Whatsapp::SendOnWhatsappService < Base::SendOnChannelService
 
   def perform_reply
     should_send_template_message = template_params.present? || !message.conversation.can_reply?
-    if should_send_template_message
+
+    # Evolution / Evolution Go do not speak Meta template APIs. MessageBuilder already
+    # renders global/free-text template bodies onto message.content — send as session text.
+    if should_send_template_message && evolution_style_provider? && message.content.present?
+      send_session_message
+    elsif should_send_template_message
       send_template_message
     elsif channel.provider == 'baileys'
       send_baileys_session_message
     else
       send_session_message
     end
+  end
+
+  def evolution_style_provider?
+    channel.provider.in?(%w[evolution evolution_go])
   end
 
   def send_template_message

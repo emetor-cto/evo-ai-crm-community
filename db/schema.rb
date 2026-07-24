@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_07_22_180000) do
+ActiveRecord::Schema[7.1].define(version: 2026_07_24_170000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_stat_statements"
   enable_extension "pg_trgm"
@@ -1023,6 +1023,32 @@ ActiveRecord::Schema[7.1].define(version: 2026_07_22_180000) do
     t.index ["status", "due_date"], name: "index_pipeline_tasks_on_pending_status_and_due_date", where: "(status = 0)"
   end
 
+  create_table "pipeline_task_templates", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.string "title", limit: 255, null: false
+    t.text "description"
+    t.integer "task_type", default: 0, null: false
+    t.integer "priority", default: 1, null: false
+    t.integer "due_in_days"
+    t.boolean "active", default: true, null: false
+    t.uuid "created_by_id", null: false
+    t.integer "position", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["active", "position"], name: "index_pipeline_task_templates_on_active_and_position"
+    t.index ["active"], name: "index_pipeline_task_templates_on_active"
+    t.index ["created_by_id"], name: "index_pipeline_task_templates_on_created_by_id"
+  end
+
+  create_table "pipeline_teams", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "pipeline_id", null: false
+    t.uuid "team_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["pipeline_id", "team_id"], name: "index_pipeline_teams_on_pipeline_id_and_team_id", unique: true
+    t.index ["pipeline_id"], name: "index_pipeline_teams_on_pipeline_id"
+    t.index ["team_id"], name: "index_pipeline_teams_on_team_id"
+  end
+
   create_table "pipelines", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.uuid "created_by_id", null: false
     t.string "name", null: false
@@ -1066,6 +1092,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_07_22_180000) do
     t.text "description"
     t.string "sku", limit: 100
     t.decimal "default_price", precision: 10, scale: 2, default: "0.0", null: false
+    t.decimal "commission", precision: 10, scale: 2, default: "0.0", null: false
     t.string "currency", limit: 3, default: "BRL", null: false
     t.string "purchase_url", limit: 2048
     t.string "status", limit: 20, default: "active", null: false
@@ -1077,6 +1104,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_07_22_180000) do
     t.index ["metadata"], name: "index_products_on_metadata", using: :gin
     t.index ["sku"], name: "index_products_on_sku", unique: true, where: "(sku IS NOT NULL)"
     t.index ["status"], name: "index_products_on_status"
+    t.check_constraint "commission >= 0::numeric", name: "products_commission_non_negative"
     t.check_constraint "default_price >= 0::numeric", name: "products_default_price_non_negative"
     t.check_constraint "kind::text = ANY (ARRAY['physical'::character varying::text, 'digital'::character varying::text])", name: "products_kind_check"
     t.check_constraint "status::text = ANY (ARRAY['active'::character varying::text, 'inactive'::character varying::text, 'draft'::character varying::text])", name: "products_status_check"
@@ -1466,6 +1494,8 @@ ActiveRecord::Schema[7.1].define(version: 2026_07_22_180000) do
   add_foreign_key "pipeline_service_definitions", "pipelines"
   add_foreign_key "pipeline_tasks", "pipeline_items"
   add_foreign_key "pipeline_tasks", "pipeline_tasks", column: "parent_task_id"
+  add_foreign_key "pipeline_teams", "pipelines"
+  add_foreign_key "pipeline_teams", "teams"
   add_foreign_key "product_variants", "products", on_delete: :cascade
   add_foreign_key "role_permissions_actions", "roles"
   add_foreign_key "scheduled_action_execution_logs", "scheduled_actions"

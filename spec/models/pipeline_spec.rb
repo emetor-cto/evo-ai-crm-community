@@ -94,5 +94,32 @@ RSpec.describe Pipeline, type: :model do
         expect(accessible).not_to include(owner_pipeline)
       end
     end
+
+    context 'when visibility is team' do
+      let!(:team) { Team.create!(name: 'Vendas Access') }
+      let!(:team_pipeline) do
+        described_class.create!(
+          name: 'Team Pipeline',
+          pipeline_type: 'sales',
+          visibility: :team,
+          is_default: false,
+          created_by: admin_user
+        )
+      end
+
+      before do
+        team_pipeline.teams << team
+        TeamMember.create!(team: team, user: account_owner)
+      end
+
+      it 'includes team pipelines for members of an assigned team' do
+        expect(Pipeline.accessible_by(account_owner)).to include(team_pipeline)
+      end
+
+      it 'excludes team pipelines for users outside assigned teams' do
+        outsider = User.create!(email: 'outsider@example.com', name: 'Outsider')
+        expect(Pipeline.accessible_by(outsider)).not_to include(team_pipeline)
+      end
+    end
   end
 end

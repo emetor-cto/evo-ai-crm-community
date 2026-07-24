@@ -39,10 +39,15 @@ class Whatsapp::Providers::EvolutionService < Whatsapp::Providers::BaseService
   end
 
   def send_template(phone_number, template_info)
-    # Evolution API doesn't support template messages in the same way
-    # For now, we'll send a regular text message
+    # Evolution API doesn't support Meta-style template messages.
+    # Prefer already-rendered message content; fall back to a plain-text best effort.
     Rails.logger.warn "Evolution API doesn't support template messages, sending as text"
-    send_text_message(phone_number, build_template_text(template_info))
+    payload = if @message&.content.present?
+                @message
+              else
+                build_template_text(template_info)
+              end
+    send_text_message(phone_number, payload)
   end
 
   def sync_templates

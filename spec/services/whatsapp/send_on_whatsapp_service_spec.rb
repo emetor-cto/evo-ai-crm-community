@@ -237,4 +237,29 @@ RSpec.describe Whatsapp::SendOnWhatsappService do
       service.send(:send_template_message)
     end
   end
+
+  describe '#perform_reply — evolution renders templates as session text' do
+    let(:provider) { 'evolution_go' }
+    let(:contact_inbox_source_id) { '5511999999999' }
+    let(:additional_attributes) { nil }
+    let(:message) do
+      instance_double(
+        Message,
+        conversation: conversation,
+        additional_attributes: { 'template_params' => { 'name' => 'bootcamp', 'id' => 't1' } },
+        content: 'Olá, bem-vindo ao bootcamp'
+      )
+    end
+
+    before do
+      allow(conversation).to receive(:can_reply?).and_return(true)
+    end
+
+    it 'uses send_session_message when content is already rendered' do
+      expect(service).to receive(:send_session_message)
+      expect(service).not_to receive(:send_template_message)
+
+      service.send(:perform_reply)
+    end
+  end
 end

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_07_24_170000) do
+ActiveRecord::Schema[7.1].define(version: 2026_07_25_070000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_stat_statements"
   enable_extension "pg_trgm"
@@ -931,7 +931,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_07_24_170000) do
     t.uuid "product_id", null: false
     t.uuid "product_variant_id"
     t.integer "quantity", default: 1, null: false
-    t.decimal "locked_unit_price", precision: 10, scale: 2, null: false
+    t.decimal "locked_unit_price", precision: 16, scale: 6, null: false
     t.string "currency", limit: 3, null: false
     t.text "notes"
     t.string "created_by_type", limit: 50
@@ -1071,7 +1071,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_07_24_170000) do
     t.uuid "product_id", null: false
     t.string "name", limit: 255, null: false
     t.string "sku", limit: 100
-    t.decimal "price_override", precision: 10, scale: 2
+    t.decimal "price_override", precision: 16, scale: 6
     t.integer "stock_quantity"
     t.jsonb "attributes_data", default: {}, null: false
     t.integer "position", default: 0, null: false
@@ -1091,8 +1091,8 @@ ActiveRecord::Schema[7.1].define(version: 2026_07_24_170000) do
     t.string "kind", limit: 20, default: "physical", null: false
     t.text "description"
     t.string "sku", limit: 100
-    t.decimal "default_price", precision: 10, scale: 2, default: "0.0", null: false
-    t.decimal "commission", precision: 10, scale: 2, default: "0.0", null: false
+    t.decimal "default_price", precision: 16, scale: 6, default: "0.0", null: false
+    t.decimal "commission", precision: 16, scale: 6, default: "0.0", null: false
     t.string "currency", limit: 3, default: "BRL", null: false
     t.string "purchase_url", limit: 2048
     t.string "status", limit: 20, default: "active", null: false

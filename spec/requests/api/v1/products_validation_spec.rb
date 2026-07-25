@@ -91,4 +91,30 @@ RSpec.describe 'Api::V1::ProductsController validation errors', type: :request d
       expect(response.parsed_body.dig('error', 'code')).to eq('RESOURCE_NOT_FOUND')
     end
   end
+
+  context 'when default_price has millesimal precision' do
+    it 'persists 5.799 without rounding to 5.80' do
+      post '/api/v1/products',
+           params: {
+             product: {
+               name: 'Precise Price',
+               kind: 'physical',
+               default_price: 5.799,
+               commission: 1.2345,
+               currency: 'BRL',
+               sku: "PREC-#{SecureRandom.hex(3)}"
+             }
+           },
+           headers: headers,
+           as: :json
+
+      expect(response).to have_http_status(:created)
+      expect(response.parsed_body.dig('data', 'default_price')).to eq(5.799)
+      expect(response.parsed_body.dig('data', 'commission')).to eq(1.2345)
+
+      product = Product.order(created_at: :desc).first
+      expect(product.default_price).to eq(BigDecimal('5.799'))
+      expect(product.commission).to eq(BigDecimal('1.2345'))
+    end
+  end
 end

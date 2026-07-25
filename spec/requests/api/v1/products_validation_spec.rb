@@ -141,4 +141,41 @@ RSpec.describe 'Api::V1::ProductsController validation errors', type: :request d
       expect(fields).to include('commission')
     end
   end
+
+  context 'when sku is blank' do
+    it 'allows multiple products with empty sku (normalized to NULL)' do
+      expect do
+        post '/api/v1/products',
+             params: {
+               product: {
+                 name: 'No SKU 1',
+                 kind: 'physical',
+                 default_price: 10,
+                 currency: 'BRL',
+                 sku: ''
+               }
+             },
+             headers: headers,
+             as: :json
+      end.to change(Product, :count).by(1)
+      expect(response).to have_http_status(:created)
+      expect(Product.order(created_at: :desc).first.sku).to be_nil
+
+      expect do
+        post '/api/v1/products',
+             params: {
+               product: {
+                 name: 'No SKU 2',
+                 kind: 'physical',
+                 default_price: 20,
+                 currency: 'BRL',
+                 sku: ''
+               }
+             },
+             headers: headers,
+             as: :json
+      end.to change(Product, :count).by(1)
+      expect(response).to have_http_status(:created)
+    end
+  end
 end

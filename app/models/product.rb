@@ -44,6 +44,8 @@ class Product < ApplicationRecord
   has_many :pipeline_item_products, dependent: :restrict_with_error
   has_many :pipeline_items, through: :pipeline_item_products
 
+  before_validation :normalize_blank_sku
+
   validates :name, presence: true, length: { maximum: 255 }
   validates :kind, presence: true, inclusion: { in: KINDS }
   validates :status, presence: true, inclusion: { in: STATUSES }
@@ -88,5 +90,13 @@ class Product < ApplicationRecord
       purchase_url: purchase_url,
       description: description.to_s.truncate(280)
     }
+  end
+
+  private
+
+  # Unique index is WHERE (sku IS NOT NULL). Empty string is NOT NULL in Postgres,
+  # so "" would collide on the second product without a SKU.
+  def normalize_blank_sku
+    self.sku = nil if sku.blank?
   end
 end

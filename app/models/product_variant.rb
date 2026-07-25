@@ -29,6 +29,8 @@ class ProductVariant < ApplicationRecord
 
   has_many :pipeline_item_products, dependent: :restrict_with_error
 
+  before_validation :normalize_blank_sku
+
   validates :name, presence: true, length: { maximum: 255 }
   validates :name, uniqueness: { scope: :product_id, case_sensitive: false }
   validates :sku, uniqueness: true, allow_blank: true
@@ -45,5 +47,11 @@ class ProductVariant < ApplicationRecord
 
   def effective_currency
     product&.currency
+  end
+
+  private
+
+  def normalize_blank_sku
+    self.sku = nil if sku.blank?
   end
 end

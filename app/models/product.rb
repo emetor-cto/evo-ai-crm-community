@@ -48,7 +48,9 @@ class Product < ApplicationRecord
   validates :kind, presence: true, inclusion: { in: KINDS }
   validates :status, presence: true, inclusion: { in: STATUSES }
   validates :default_price, presence: true, numericality: { greater_than_or_equal_to: 0 }
-  validates :commission, presence: true, numericality: { greater_than_or_equal_to: 0 }
+  # Commission is a percentage of the product price (0–100), not a fixed currency amount.
+  validates :commission, presence: true,
+                         numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 100 }
   validates :currency, presence: true, inclusion: { in: ALLOWED_CURRENCIES }
   validates :sku, uniqueness: true, allow_blank: true
   validates :stock_quantity, numericality: { greater_than_or_equal_to: 0, only_integer: true }, allow_nil: true
@@ -66,6 +68,11 @@ class Product < ApplicationRecord
     variant&.price_override || default_price
   end
 
+  # Monetary commission for a given sale price: price × (commission% / 100).
+  def commission_amount_for(price = default_price)
+    BigDecimal(price.to_s) * BigDecimal(commission.to_s) / 100
+  end
+
   # Lightweight payload used when injecting the catalog into the AI agent
   # system prompt. Keep this small — the entire collection ends up inside
   # a single LLM context window.
@@ -75,7 +82,8 @@ class Product < ApplicationRecord
       name: name,
       kind: kind,
       default_price: default_price.to_f,
-      commission: commission.to_f,
+      commission_percent: commission.to_f,
+      commission_amount: commission_amount_for.to_f,
       currency: currency,
       purchase_url: purchase_url,
       description: description.to_s.truncate(280)

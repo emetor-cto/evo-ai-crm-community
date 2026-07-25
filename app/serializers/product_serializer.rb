@@ -20,7 +20,9 @@ module ProductSerializer
       description: product.description,
       sku: product.sku,
       default_price: product.default_price.to_f,
+      # Percent of the product price (0–100), not a fixed currency amount.
       commission: product.commission.to_f,
+      commission_amount: product.commission_amount_for.to_f,
       currency: product.currency,
       purchase_url: product.purchase_url,
       status: product.status,

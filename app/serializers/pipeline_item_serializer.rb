@@ -154,6 +154,7 @@ module PipelineItemSerializer
             value: service['value'].to_f
           }
           service_info[:commission] = service['commission'].to_f if service['commission'].present?
+          service_info[:commission_percent] = service['commission_percent'].to_f if service['commission_percent'].present?
           service_info[:product_id] = service['product_id'] if service['product_id'].present?
           service_info[:service_definition_id] = service['service_definition_id'] if service['service_definition_id'].present?
           service_info

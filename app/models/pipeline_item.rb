@@ -132,7 +132,11 @@ class PipelineItem < ApplicationRecord
     return 0 unless custom_fields&.dig('services').is_a?(Array)
 
     custom_fields['services'].sum do |service|
-      service['commission'].to_f
+      next service['commission'].to_f if service['commission'].present? && service['commission_percent'].blank?
+
+      value = service['value'].to_f
+      percent = service['commission_percent'].to_f
+      value * percent / 100.0
     end
   end
 
@@ -165,18 +169,24 @@ class PipelineItem < ApplicationRecord
       service_definition_id = service['service_definition_id']
       product_id = service['product_id']
       commission = service['commission']
+      commission_percent = service['commission_percent']
 
       normalized_service = {
         'name' => service_name,
-        'value' => service_value.round(2).to_s
+        'value' => service_value.round(6).to_s
       }
 
       if product_id.present?
         normalized_service['product_id'] = product_id.to_s
       end
 
-      if commission.present?
-        normalized_service['commission'] = commission.to_f.round(2).to_s
+      if commission_percent.present?
+        percent = commission_percent.to_f.clamp(0, 100)
+        normalized_service['commission_percent'] = percent.round(4).to_s
+        normalized_service['commission'] = (service_value * percent / 100.0).round(6).to_s
+      elsif commission.present?
+        # Legacy fixed-amount commission (pre-percentage products).
+        normalized_service['commission'] = commission.to_f.round(6).to_s
       end
 
       if service_definition_id.present?

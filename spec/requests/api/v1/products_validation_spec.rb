@@ -100,7 +100,7 @@ RSpec.describe 'Api::V1::ProductsController validation errors', type: :request d
                name: 'Precise Price',
                kind: 'physical',
                default_price: 5.799,
-               commission: 1.2345,
+               commission: 12.5,
                currency: 'BRL',
                sku: "PREC-#{SecureRandom.hex(3)}"
              }
@@ -110,11 +110,35 @@ RSpec.describe 'Api::V1::ProductsController validation errors', type: :request d
 
       expect(response).to have_http_status(:created)
       expect(response.parsed_body.dig('data', 'default_price')).to eq(5.799)
-      expect(response.parsed_body.dig('data', 'commission')).to eq(1.2345)
+      expect(response.parsed_body.dig('data', 'commission')).to eq(12.5)
+      expect(response.parsed_body.dig('data', 'commission_amount')).to eq(0.724875)
 
       product = Product.order(created_at: :desc).first
       expect(product.default_price).to eq(BigDecimal('5.799'))
-      expect(product.commission).to eq(BigDecimal('1.2345'))
+      expect(product.commission).to eq(BigDecimal('12.5'))
+      expect(product.commission_amount_for).to eq(BigDecimal('0.724875'))
+    end
+  end
+
+  context 'when commission percent is out of range' do
+    it 'rejects values above 100' do
+      post '/api/v1/products',
+           params: {
+             product: {
+               name: 'Bad Commission',
+               kind: 'physical',
+               default_price: 100,
+               commission: 150,
+               currency: 'BRL',
+               sku: "BAD-#{SecureRandom.hex(3)}"
+             }
+           },
+           headers: headers,
+           as: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      fields = response.parsed_body.dig('error', 'details').map { |d| d['field'] }
+      expect(fields).to include('commission')
     end
   end
 end

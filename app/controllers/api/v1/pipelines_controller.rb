@@ -15,10 +15,11 @@ class Api::V1::PipelinesController < Api::V1::BaseController
     set_as_default: 'pipelines.update',
     stats: 'pipelines.read',
     by_contact: 'pipelines.read',
-    by_conversation: 'pipelines.read'
+    by_conversation: 'pipelines.read',
+    reminders: 'pipelines.read'
   })
 
-  before_action :fetch_pipeline, only: [:show, :update, :destroy, :archive, :set_as_default]
+  before_action :fetch_pipeline, only: [:show, :update, :destroy, :archive, :set_as_default, :reminders]
   before_action :fetch_pipeline_for_stats, only: [:stats], if: -> { params[:id].present? }
   before_action :validate_pipeline_limit, only: [:create]
   before_action :fetch_contact_for_by_contact, only: [:by_contact]
@@ -209,10 +210,18 @@ class Api::V1::PipelinesController < Api::V1::BaseController
   end
 
   def by_contact
-    serialized_pipelines = fetch_pipelines_by_item_filter(
-      filter_condition: { contact_id: @contact.id },
-      item_filter: ->(item) { item.contact_id == @contact.id }
-    )
+    # Full history: lead cards (contact_id) + promoted cards (conversation.contact_id).
+    contact_id = @contact.id
+    item_ids = PipelineItem
+                 .left_outer_joins(:conversation)
+                 .where(
+                   'pipeline_items.contact_id = :cid OR conversations.contact_id = :cid',
+                   cid: contact_id
+                 )
+                 .distinct
+                 .pluck(:id)
+
+    serialized_pipelines = fetch_pipelines_by_item_ids(item_ids)
 
     success_response(
       data: serialized_pipelines,
@@ -470,6 +479,92 @@ class Api::V1::PipelinesController < Api::V1::BaseController
       include_items: true,
       include_tasks_info: true,
       include_services_info: true
+    )
+  end
+
+  def fetch_pipelines_by_item_ids(item_ids)
+    return [] if item_ids.blank?
+
+    pipeline_ids = PipelineItem.where(id: item_ids).distinct.pluck(:pipeline_id)
+    id_set = item_ids.map(&:to_s).to_set
+
+    pipelines = Pipeline.all
+                        .where(id: pipeline_ids)
+                        .includes(
+                          pipeline_stages: [],
+                          pipeline_items: [
+                            :pipeline_stage,
+                            { conversation: %i[contact assignee inbox] }
+                          ]
+                        )
+                        .order(:name)
+
+    pipelines.each do |pipeline|
+      filtered = pipeline.pipeline_items.select { |item| id_set.include?(item.id.to_s) }
+      pipeline.association(:pipeline_items).target = filtered
+    end
+
+    PipelineSerializer.serialize_collection(
+      pipelines,
+      include_stages: true,
+      include_items: true,
+      include_tasks_info: true,
+      include_services_info: true
+    )
+  end
+
+  def reminders
+    period = params[:period].presence || 'today'
+    user = Current.user
+
+    tasks_scope = PipelineTask
+                    .joins(:pipeline_item)
+                    .where(pipeline_items: { pipeline_id: @pipeline.id })
+                    .pending
+                    .where('pipeline_tasks.assigned_to_id = :uid OR pipeline_tasks.assigned_to_id IS NULL OR pipeline_tasks.created_by_id = :uid', uid: user.id)
+                    .includes(:assigned_to, :created_by, pipeline_item: [:pipeline_stage, { conversation: :contact }, :contact])
+
+    tasks_scope = case period
+                  when 'upcoming'
+                    tasks_scope.where(due_date: Time.zone.now.beginning_of_day..(Time.zone.now + 7.days).end_of_day)
+                  else
+                    tasks_scope.due_today
+                  end
+
+    contact_ids = PipelineItem
+                    .where(pipeline_id: @pipeline.id)
+                    .left_outer_joins(:conversation)
+                    .pluck(Arel.sql('pipeline_items.contact_id'), Arel.sql('conversations.contact_id'))
+                    .flatten
+                    .compact
+                    .uniq
+
+    schedules_scope = ScheduledAction
+                        .where(contact_id: contact_ids, status: 'scheduled')
+                        .where('created_by = :uid OR notify_user_id = :uid OR notify_user_id IS NULL', uid: user.id)
+                        .includes(:contact, :conversation)
+
+    schedules_scope = case period
+                      when 'upcoming'
+                        schedules_scope.where(scheduled_for: Time.zone.now.beginning_of_day..(Time.zone.now + 7.days).end_of_day)
+                      else
+                        schedules_scope.where(scheduled_for: Time.zone.now.all_day)
+                      end
+
+    success_response(
+      data: {
+        period: period,
+        tasks: PipelineTaskSerializer.serialize_collection(
+          tasks_scope.order(:due_date).limit(100),
+          include_pipeline_item: true
+        ),
+        scheduled_actions: schedules_scope.order(:scheduled_for).limit(100).map do |sa|
+          ScheduledActionSerializer.serialize(sa).merge(
+            contact: sa.contact && { id: sa.contact.id, name: sa.contact.name }
+          )
+        end
+      },
+      message: 'Pipeline reminders retrieved successfully'
     )
   end
 end

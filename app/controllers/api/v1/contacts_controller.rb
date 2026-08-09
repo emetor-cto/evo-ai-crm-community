@@ -329,20 +329,18 @@ class Api::V1::ContactsController < Api::V1::BaseController
   end
 
   def pipelines
-    # Buscar todas as conversas do contato
     conversation_ids = @contact.conversations.pluck(:id)
 
-    # Buscar pipeline items por contact_id ou conversation_id
-    # Note: PipelineItem can belong to either a contact OR a conversation (never both)
     pipeline_items = PipelineItem
                        .includes(:pipeline, :pipeline_stage)
-                       .where('contact_id = ? OR conversation_id IN (?)', @contact.id, conversation_ids)
+                       .where('contact_id = ? OR conversation_id IN (?)', @contact.id, conversation_ids.presence || [0])
+                       .order(entered_at: :desc)
 
-    # Agrupar por pipeline
-    pipelines_data = pipeline_items.group_by(&:pipeline).map do |pipeline, items|
-      # Pegar o primeiro item de cada pipeline (assumindo que um contato está em apenas um estágio por pipeline)
-      item = items.first
+    # Full negotiation history: every pipeline item for this contact (not one per pipeline).
+    pipelines_data = pipeline_items.map do |item|
+      pipeline = item.pipeline
       stage = item.pipeline_stage
+      next unless pipeline && stage
 
       {
         pipeline: {
@@ -362,10 +360,12 @@ class Api::V1::ContactsController < Api::V1::BaseController
           item_id: item.contact_id || item.conversation_id,
           type: item.lead? ? 'lead' : 'deal',
           entered_at: item.entered_at&.to_i || item.created_at.to_i,
-          notes: item.custom_fields&.dig('notes')
+          completed_at: item.completed_at&.to_i,
+          notes: item.custom_fields&.dig('notes'),
+          total_value: item.respond_to?(:services_total_value) ? item.services_total_value : 0
         }
       }
-    end
+    end.compact
 
     success_response(
       data: pipelines_data,

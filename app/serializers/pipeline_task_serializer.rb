@@ -74,9 +74,12 @@ module PipelineTaskSerializer
       end
     end
     
-    # Include pipeline item
+    # Include pipeline item (with contact/conversation so callers can open the card/contact)
     if include_pipeline_item && pipeline_task.pipeline_item.present?
-      result[:pipeline_item] = PipelineItemSerializer.serialize(pipeline_task.pipeline_item)
+      result[:pipeline_item] = PipelineItemSerializer.serialize(
+        pipeline_task.pipeline_item,
+        include_entity: true
+      )
     end
     
     result.compact

@@ -744,6 +744,21 @@ class Api::V1::PipelineItemsController < Api::V1::BaseController
     elsif conversation_filters.any?
       @pipeline_items = @pipeline_items.joins(:conversation).where(conversations: conversation_filters)
     end
+
+    apply_reminder_filter if params[:reminder].present?
+  end
+
+  # Filter cards that have pending tasks due today / in the next 7 days.
+  def apply_reminder_filter
+    tasks = PipelineTask.pending.where.not(due_date: nil)
+    tasks = case params[:reminder]
+            when 'upcoming'
+              tasks.where(due_date: Time.zone.now.beginning_of_day..(Time.zone.now + 7.days).end_of_day)
+            else
+              tasks.due_today
+            end
+
+    @pipeline_items = @pipeline_items.where(id: tasks.select(:pipeline_item_id))
   end
 
   def pagination_requested?

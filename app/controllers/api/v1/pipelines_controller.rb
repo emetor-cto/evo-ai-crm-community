@@ -262,7 +262,7 @@ class Api::V1::PipelinesController < Api::V1::BaseController
     tasks_scope = PipelineTask
                     .joins(:pipeline_item)
                     .where(pipeline_items: { pipeline_id: @pipeline.id })
-                    .pending
+                    .where(status: %i[pending overdue])
                     .where('pipeline_tasks.assigned_to_id = :uid OR pipeline_tasks.assigned_to_id IS NULL OR pipeline_tasks.created_by_id = :uid', uid: user.id)
                     .includes(:assigned_to, :created_by, pipeline_item: [:pipeline_stage, { conversation: :contact }, :contact])
 
@@ -270,7 +270,12 @@ class Api::V1::PipelinesController < Api::V1::BaseController
                   when 'upcoming'
                     tasks_scope.where(due_date: Time.zone.now.beginning_of_day..(Time.zone.now + 7.days).end_of_day)
                   else
-                    tasks_scope.due_today
+                    # Include overdue tasks that were due today or earlier (still open).
+                    tasks_scope.where(
+                      'DATE(pipeline_tasks.due_date) = :today OR (pipeline_tasks.status = :overdue AND DATE(pipeline_tasks.due_date) <= :today)',
+                      today: Date.current,
+                      overdue: PipelineTask.statuses[:overdue]
+                    )
                   end
 
     contact_ids = PipelineItem

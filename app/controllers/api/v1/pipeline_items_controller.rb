@@ -748,14 +748,18 @@ class Api::V1::PipelineItemsController < Api::V1::BaseController
     apply_reminder_filter if params[:reminder].present?
   end
 
-  # Filter cards that have pending tasks due today / in the next 7 days.
+  # Filter cards that have open tasks due today / overdue / in the next 7 days.
   def apply_reminder_filter
-    tasks = PipelineTask.pending.where.not(due_date: nil)
+    tasks = PipelineTask.where(status: %i[pending overdue]).where.not(due_date: nil)
     tasks = case params[:reminder]
             when 'upcoming'
               tasks.where(due_date: Time.zone.now.beginning_of_day..(Time.zone.now + 7.days).end_of_day)
             else
-              tasks.due_today
+              tasks.where(
+                'DATE(due_date) = :today OR (status = :overdue AND DATE(due_date) <= :today)',
+                today: Date.current,
+                overdue: PipelineTask.statuses[:overdue]
+              )
             end
 
     @pipeline_items = @pipeline_items.where(id: tasks.select(:pipeline_item_id))

@@ -255,6 +255,61 @@ class Api::V1::PipelinesController < Api::V1::BaseController
     )
   end
 
+  def reminders
+    period = params[:period].presence || 'today'
+    user = Current.user
+
+    tasks_scope = PipelineTask
+                    .joins(:pipeline_item)
+                    .where(pipeline_items: { pipeline_id: @pipeline.id })
+                    .pending
+                    .where('pipeline_tasks.assigned_to_id = :uid OR pipeline_tasks.assigned_to_id IS NULL OR pipeline_tasks.created_by_id = :uid', uid: user.id)
+                    .includes(:assigned_to, :created_by, pipeline_item: [:pipeline_stage, { conversation: :contact }, :contact])
+
+    tasks_scope = case period
+                  when 'upcoming'
+                    tasks_scope.where(due_date: Time.zone.now.beginning_of_day..(Time.zone.now + 7.days).end_of_day)
+                  else
+                    tasks_scope.due_today
+                  end
+
+    contact_ids = PipelineItem
+                    .where(pipeline_id: @pipeline.id)
+                    .left_outer_joins(:conversation)
+                    .pluck(Arel.sql('pipeline_items.contact_id'), Arel.sql('conversations.contact_id'))
+                    .flatten
+                    .compact
+                    .uniq
+
+    schedules_scope = ScheduledAction
+                        .where(contact_id: contact_ids, status: 'scheduled')
+                        .where('created_by = :uid OR notify_user_id = :uid OR notify_user_id IS NULL', uid: user.id)
+                        .includes(:contact, :conversation)
+
+    schedules_scope = case period
+                      when 'upcoming'
+                        schedules_scope.where(scheduled_for: Time.zone.now.beginning_of_day..(Time.zone.now + 7.days).end_of_day)
+                      else
+                        schedules_scope.where(scheduled_for: Time.zone.now.all_day)
+                      end
+
+    success_response(
+      data: {
+        period: period,
+        tasks: PipelineTaskSerializer.serialize_collection(
+          tasks_scope.order(:due_date).limit(100),
+          include_pipeline_item: true
+        ),
+        scheduled_actions: schedules_scope.order(:scheduled_for).limit(100).map do |sa|
+          ScheduledActionSerializer.serialize(sa).merge(
+            contact: sa.contact && { id: sa.contact.id, name: sa.contact.name }
+          )
+        end
+      },
+      message: 'Pipeline reminders retrieved successfully'
+    )
+  end
+
   private
 
   def fetch_pipeline
@@ -510,61 +565,6 @@ class Api::V1::PipelinesController < Api::V1::BaseController
       include_items: true,
       include_tasks_info: true,
       include_services_info: true
-    )
-  end
-
-  def reminders
-    period = params[:period].presence || 'today'
-    user = Current.user
-
-    tasks_scope = PipelineTask
-                    .joins(:pipeline_item)
-                    .where(pipeline_items: { pipeline_id: @pipeline.id })
-                    .pending
-                    .where('pipeline_tasks.assigned_to_id = :uid OR pipeline_tasks.assigned_to_id IS NULL OR pipeline_tasks.created_by_id = :uid', uid: user.id)
-                    .includes(:assigned_to, :created_by, pipeline_item: [:pipeline_stage, { conversation: :contact }, :contact])
-
-    tasks_scope = case period
-                  when 'upcoming'
-                    tasks_scope.where(due_date: Time.zone.now.beginning_of_day..(Time.zone.now + 7.days).end_of_day)
-                  else
-                    tasks_scope.due_today
-                  end
-
-    contact_ids = PipelineItem
-                    .where(pipeline_id: @pipeline.id)
-                    .left_outer_joins(:conversation)
-                    .pluck(Arel.sql('pipeline_items.contact_id'), Arel.sql('conversations.contact_id'))
-                    .flatten
-                    .compact
-                    .uniq
-
-    schedules_scope = ScheduledAction
-                        .where(contact_id: contact_ids, status: 'scheduled')
-                        .where('created_by = :uid OR notify_user_id = :uid OR notify_user_id IS NULL', uid: user.id)
-                        .includes(:contact, :conversation)
-
-    schedules_scope = case period
-                      when 'upcoming'
-                        schedules_scope.where(scheduled_for: Time.zone.now.beginning_of_day..(Time.zone.now + 7.days).end_of_day)
-                      else
-                        schedules_scope.where(scheduled_for: Time.zone.now.all_day)
-                      end
-
-    success_response(
-      data: {
-        period: period,
-        tasks: PipelineTaskSerializer.serialize_collection(
-          tasks_scope.order(:due_date).limit(100),
-          include_pipeline_item: true
-        ),
-        scheduled_actions: schedules_scope.order(:scheduled_for).limit(100).map do |sa|
-          ScheduledActionSerializer.serialize(sa).merge(
-            contact: sa.contact && { id: sa.contact.id, name: sa.contact.name }
-          )
-        end
-      },
-      message: 'Pipeline reminders retrieved successfully'
     )
   end
 end

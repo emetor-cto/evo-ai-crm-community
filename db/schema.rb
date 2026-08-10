@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_07_25_080000) do
+ActiveRecord::Schema[7.1].define(version: 2026_08_09_180000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_stat_statements"
   enable_extension "pg_trgm"
@@ -1159,6 +1159,18 @@ ActiveRecord::Schema[7.1].define(version: 2026_07_25_080000) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["key"], name: "index_runtime_configs_on_key", unique: true
+  end
+
+  create_table "sales_analytics_dashboards", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.string "kind", limit: 40, null: false
+    t.integer "year", null: false
+    t.jsonb "data", default: {}, null: false
+    t.uuid "updated_by_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["kind", "year"], name: "index_sales_analytics_dashboards_on_kind_and_year", unique: true
+    t.index ["kind"], name: "index_sales_analytics_dashboards_on_kind"
+    t.index ["updated_by_id"], name: "index_sales_analytics_dashboards_on_updated_by_id"
   end
 
   create_table "scheduled_action_execution_logs", force: :cascade do |t|

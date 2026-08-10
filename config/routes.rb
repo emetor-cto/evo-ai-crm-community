@@ -160,6 +160,10 @@ Rails.application.routes.draw do
         end
       end
 
+      get 'sales_analytics_dashboards/:kind', to: 'sales_analytics_dashboards#show'
+      put 'sales_analytics_dashboards/:kind', to: 'sales_analytics_dashboards#update'
+      patch 'sales_analytics_dashboards/:kind', to: 'sales_analytics_dashboards#update'
+
       resources :agent_bots, only: [:index, :create, :show, :update, :destroy], controller: 'agent_bots' do
         delete :avatar, on: :member
       end

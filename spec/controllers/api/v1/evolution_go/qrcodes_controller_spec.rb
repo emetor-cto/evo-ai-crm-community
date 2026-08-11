@@ -67,6 +67,7 @@ RSpec.describe Api::V1::EvolutionGo::QrcodesController, type: :controller do
       controller_instance.params = ActionController::Parameters.new(qrcode: { instance_uuid: 'inst-uuid' })
       allow(GlobalConfigService).to receive(:load).with('EVOLUTION_GO_API_URL', '').and_return('http://global.example.com')
       allow(GlobalConfigService).to receive(:load).with('EVOLUTION_GO_ADMIN_SECRET', '').and_return('global-secret')
+      allow(controller_instance).to receive(:connect_instance)
       allow(controller_instance).to receive(:get_qrcode_go).with('http://global.example.com', 'inst-tok').and_return(base64: 'x', code: 'y', connected: false)
 
       expect(controller_instance).to receive(:render).with(

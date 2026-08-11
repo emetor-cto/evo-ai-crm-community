@@ -3,7 +3,7 @@ module EvolutionGoConcern
 
   private
 
-  def connect_instance(api_url, instance_token, _instance_name = nil, open_timeout: 15, read_timeout: 15)
+  def connect_instance(api_url, instance_token, _instance_name = nil, open_timeout: 15, read_timeout: 25)
     connect_url = "#{api_url.chomp('/')}/instance/connect"
     Rails.logger.info "Evolution Go API: Connecting instance at #{connect_url}"
 

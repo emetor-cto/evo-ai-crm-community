@@ -47,7 +47,7 @@ class Api::V1::EvolutionGo::QrcodesController < Api::V1::BaseController
 
       Rails.logger.info "Evolution Go API: Getting QR code for instance #{instance_uuid}"
 
-      # Get QR code using Evolution Go API
+      connect_instance(api_url, instance_token)
       qrcode_data = get_qrcode_go(api_url, instance_token)
 
       render json: {
@@ -121,19 +121,28 @@ class Api::V1::EvolutionGo::QrcodesController < Api::V1::BaseController
     Rails.logger.info "Evolution Go API: Getting QR code from #{qrcode_url}"
 
     uri = URI.parse(qrcode_url)
+    response = nil
 
-    http = Net::HTTP.new(uri.host, uri.port)
-    http.use_ssl = (uri.scheme == 'https')
-    http.open_timeout = 15
-    http.read_timeout = 15
+    2.times do |attempt|
+      http = Net::HTTP.new(uri.host, uri.port)
+      http.use_ssl = (uri.scheme == 'https')
+      http.open_timeout = 15
+      http.read_timeout = 35
 
-    request = Net::HTTP::Get.new(uri)
-    request['apikey'] = instance_token # header com apikey da instancia
-    request['Content-Type'] = 'application/json'
+      request = Net::HTTP::Get.new(uri)
+      request['apikey'] = instance_token
+      request['Content-Type'] = 'application/json'
 
-    response = http.request(request)
-    Rails.logger.info "Evolution Go API: QR code response code: #{response.code}"
-    Rails.logger.info "Evolution Go API: QR code response body: #{response.body}"
+      response = http.request(request)
+      Rails.logger.info "Evolution Go API: QR code response code: #{response.code} (attempt #{attempt + 1})"
+      Rails.logger.info "Evolution Go API: QR code response body: #{response.body}"
+
+      break if response.is_a?(Net::HTTPSuccess)
+      break unless response.code == '400' && response.body.to_s.include?('no QR code available') && attempt.zero?
+
+      Rails.logger.info 'Evolution Go API: QR not ready yet, retrying once...'
+      sleep 2
+    end
 
     raise "Failed to get QR code. Status: #{response.code}, Body: #{response.body}" unless response.is_a?(Net::HTTPSuccess)
 

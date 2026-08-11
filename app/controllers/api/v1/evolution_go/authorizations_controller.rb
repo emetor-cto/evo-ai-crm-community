@@ -377,7 +377,7 @@ class Api::V1::EvolutionGo::AuthorizationsController < Api::V1::BaseController
     http = Net::HTTP.new(uri.host, uri.port)
     http.use_ssl = (uri.scheme == 'https')
     http.open_timeout = 15
-    http.read_timeout = 15
+    http.read_timeout = 35
 
     request = Net::HTTP::Get.new(uri)
     request['apikey'] = instance_token # header com apikey da instancia

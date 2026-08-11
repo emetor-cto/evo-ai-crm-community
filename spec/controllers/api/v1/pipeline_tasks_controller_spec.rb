@@ -54,6 +54,15 @@ RSpec.describe Api::V1::PipelineTasksController, type: :controller do
         expect(task.due_date).to be_within(1.minute).of(2.hours.from_now)
       end
 
+      it 'creates a task when conversation_id is the public uuid, not the primary key' do
+        expect(conversation.uuid).to be_present
+
+        post :for_conversation, params: { conversation_id: conversation.uuid, title: 'Via uuid' }
+
+        expect(response).to have_http_status(:created)
+        expect(conversation.pipeline_items.first.tasks.first.title).to eq('Via uuid')
+      end
+
       it 'creates a task with defaults when only the title is given (AC2)' do
         post :for_conversation, params: { conversation_id: conversation.id, title: 'Minimal task' }
 

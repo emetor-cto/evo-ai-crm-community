@@ -1,4 +1,6 @@
 class Api::V1::PipelineTasksController < Api::V1::BaseController
+  include ConversationResolver
+
   before_action :set_pipeline_item, only: [:create]
   before_action :set_pipeline_item, only: [:index], if: -> { params[:pipeline_item_id].present? }
   before_action :set_task, only: [:show, :update, :destroy, :complete, :cancel, :reopen, :add_subtask, :move, :reorder]
@@ -255,7 +257,7 @@ class Api::V1::PipelineTasksController < Api::V1::BaseController
   # the conversation/item owners because the Journey call is service-authenticated
   # (no Current.user) and the Community fork has no SuperAdmin system user.
   def for_conversation
-    conversation = find_conversation(params[:conversation_id])
+    conversation = resolve_conversation(params[:conversation_id])
     return error_response(ApiErrorCodes::CONVERSATION_NOT_FOUND, 'Conversation not found') if conversation.nil?
 
     pipeline_item = conversation.pipeline_items.active.first
@@ -312,7 +314,19 @@ class Api::V1::PipelineTasksController < Api::V1::BaseController
                             { conversation: :contact }
                           ]
                         )
-                        .order(Arel.sql('pipeline_tasks.due_date ASC NULLS LAST'), 'pipeline_tasks.created_at DESC')
+                        # Hoje → futuras → atrasadas → sem data (evita enterrar o dia/futuro sob vencidas).
+                        .order(
+                          Arel.sql(<<~SQL.squish),
+                            CASE
+                              WHEN pipeline_tasks.due_date IS NULL THEN 3
+                              WHEN DATE(pipeline_tasks.due_date) = CURRENT_DATE THEN 0
+                              WHEN DATE(pipeline_tasks.due_date) > CURRENT_DATE THEN 1
+                              ELSE 2
+                            END ASC,
+                            pipeline_tasks.due_date ASC NULLS LAST
+                          SQL
+                          created_at: :desc
+                        )
 
     unless params[:hierarchy].to_s == 'all'
       @pipeline_tasks = @pipeline_tasks.root_tasks
@@ -357,10 +371,6 @@ class Api::V1::PipelineTasksController < Api::V1::BaseController
     end
 
     scope
-  end
-
-  def find_conversation(ref)
-    Conversation.find_by(id: ref) || Conversation.find_by(display_id: ref)
   end
 
   def create_conversation_task(pipeline_item, creator)
@@ -457,7 +467,21 @@ class Api::V1::PipelineTasksController < Api::V1::BaseController
     scope = scope.where('due_date <= ?', params[:due_date_to]) if params[:due_date_to].present?
     scope = scope.due_today if params[:due_today] == 'true'
     scope = scope.due_this_week if params[:due_this_week] == 'true'
-    scope = scope.past_due if params[:past_due] == 'true'
+
+    if params[:upcoming] == 'true'
+      # Futuras: a partir de amanhã (hoje tem filtro próprio).
+      scope = scope.where('DATE(pipeline_tasks.due_date) > ?', Date.current)
+    end
+
+    if params[:past_due] == 'true'
+      # Inclui status overdue e pending com due_date no passado.
+      scope = scope.where(
+        'pipeline_tasks.status = :overdue OR (pipeline_tasks.status = :pending AND pipeline_tasks.due_date < :now)',
+        overdue: PipelineTask.statuses[:overdue],
+        pending: PipelineTask.statuses[:pending],
+        now: Time.current
+      )
+    end
 
     scope
   end

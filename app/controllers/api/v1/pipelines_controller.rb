@@ -257,18 +257,23 @@ class Api::V1::PipelinesController < Api::V1::BaseController
 
   def reminders
     period = params[:period].presence || 'today'
-    user = Current.user
 
     tasks_scope = PipelineTask
                     .joins(:pipeline_item)
                     .where(pipeline_items: { pipeline_id: @pipeline.id })
                     .where(status: %i[pending overdue])
-                    .where('pipeline_tasks.assigned_to_id = :uid OR pipeline_tasks.assigned_to_id IS NULL OR pipeline_tasks.created_by_id = :uid', uid: user.id)
+                    .where.not(due_date: nil)
                     .includes(:assigned_to, :created_by, pipeline_item: [:pipeline_stage, { conversation: :contact }, :contact])
 
+    # Use DATE() so timezone / midnight UTC due_dates match calendar days (same as board filter).
     tasks_scope = case period
                   when 'upcoming'
-                    tasks_scope.where(due_date: Time.zone.now.beginning_of_day..(Time.zone.now + 7.days).end_of_day)
+                    # Next 7 calendar days after today (tomorrow .. today+7).
+                    tasks_scope.where(
+                      'DATE(pipeline_tasks.due_date) > :today AND DATE(pipeline_tasks.due_date) <= :until_date',
+                      today: Date.current,
+                      until_date: Date.current + 7.days
+                    )
                   else
                     # Include overdue tasks that were due today or earlier (still open).
                     tasks_scope.where(
@@ -288,14 +293,17 @@ class Api::V1::PipelinesController < Api::V1::BaseController
 
     schedules_scope = ScheduledAction
                         .where(contact_id: contact_ids, status: 'scheduled')
-                        .where('created_by = :uid OR notify_user_id = :uid OR notify_user_id IS NULL', uid: user.id)
                         .includes(:contact, :conversation)
 
     schedules_scope = case period
                       when 'upcoming'
-                        schedules_scope.where(scheduled_for: Time.zone.now.beginning_of_day..(Time.zone.now + 7.days).end_of_day)
+                        schedules_scope.where(
+                          'DATE(scheduled_actions.scheduled_for) > :today AND DATE(scheduled_actions.scheduled_for) <= :until_date',
+                          today: Date.current,
+                          until_date: Date.current + 7.days
+                        )
                       else
-                        schedules_scope.where(scheduled_for: Time.zone.now.all_day)
+                        schedules_scope.where('DATE(scheduled_actions.scheduled_for) = :today', today: Date.current)
                       end
 
     success_response(

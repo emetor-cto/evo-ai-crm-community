@@ -1,30 +1,15 @@
 class Api::V1::PipelineTasksController < Api::V1::BaseController
-  before_action :set_pipeline_item, only: [:index, :create]
+  before_action :set_pipeline_item, only: [:create]
+  before_action :set_pipeline_item, only: [:index], if: -> { params[:pipeline_item_id].present? }
   before_action :set_task, only: [:show, :update, :destroy, :complete, :cancel, :reopen, :add_subtask, :move, :reorder]
   before_action :authorize_task, only: [:update, :destroy, :complete, :cancel, :reopen, :add_subtask, :move, :reorder]
 
   def index
-    @tasks = tasks_scope.includes(:created_by, :assigned_to, :pipeline_item, :parent_task, :subtasks)
-    
-    # Filter by hierarchy level
-    if params[:hierarchy].present?
-      case params[:hierarchy]
-      when 'all'
-        # Include all tasks with hierarchy
-      else
-        # Default: only root tasks
-        @tasks = @tasks.root_tasks
-      end
+    if params[:pipeline_item_id].present?
+      index_for_pipeline_item
     else
-      @tasks = @tasks.root_tasks # Default to root tasks only
+      index_global
     end
-    
-    @tasks = apply_filters(@tasks)
-    
-    success_response(
-      data: PipelineTaskSerializer.serialize_collection(@tasks, include_subtasks: true),
-      message: 'Pipeline tasks retrieved successfully'
-    )
   end
 
   def show
@@ -290,6 +275,89 @@ class Api::V1::PipelineTasksController < Api::V1::BaseController
   end
 
   private
+
+  def index_for_pipeline_item
+    @tasks = tasks_scope.includes(:created_by, :assigned_to, :pipeline_item, :parent_task, :subtasks)
+
+    # Filter by hierarchy level
+    if params[:hierarchy].present?
+      case params[:hierarchy]
+      when 'all'
+        # Include all tasks with hierarchy
+      else
+        @tasks = @tasks.root_tasks
+      end
+    else
+      @tasks = @tasks.root_tasks
+    end
+
+    @tasks = apply_filters(@tasks)
+
+    success_response(
+      data: PipelineTaskSerializer.serialize_collection(@tasks, include_subtasks: true),
+      message: 'Pipeline tasks retrieved successfully'
+    )
+  end
+
+  def index_global
+    @pipeline_tasks = PipelineTask
+                        .joins(:pipeline_item)
+                        .includes(
+                          :created_by,
+                          :assigned_to,
+                          pipeline_item: [
+                            :pipeline,
+                            :pipeline_stage,
+                            :contact,
+                            { conversation: :contact }
+                          ]
+                        )
+                        .order(Arel.sql('pipeline_tasks.due_date ASC NULLS LAST'), 'pipeline_tasks.created_at DESC')
+
+    unless params[:hierarchy].to_s == 'all'
+      @pipeline_tasks = @pipeline_tasks.root_tasks
+    end
+
+    @pipeline_tasks = apply_filters(@pipeline_tasks)
+    @pipeline_tasks = apply_global_filters(@pipeline_tasks)
+
+    apply_pagination
+
+    paginated_response(
+      data: @pipeline_tasks.map { |task| serialize_global_task(task) },
+      collection: @pipeline_tasks,
+      message: 'Pipeline tasks retrieved successfully'
+    )
+  end
+
+  def serialize_global_task(task)
+    data = PipelineTaskSerializer.serialize(task, include_pipeline_item: true)
+    pipeline = task.pipeline_item&.pipeline
+    stage = task.pipeline_item&.pipeline_stage
+    data[:pipeline] = pipeline && { id: pipeline.id, name: pipeline.name }
+    data[:pipeline_stage] = stage && { id: stage.id, name: stage.name }
+    data
+  end
+
+  def apply_global_filters(scope)
+    if params[:pipeline_id].present?
+      scope = scope.where(pipeline_items: { pipeline_id: params[:pipeline_id] })
+    end
+
+    if params[:q].present?
+      q = "%#{ActiveRecord::Base.sanitize_sql_like(params[:q].to_s.strip)}%"
+      scope = scope.where(
+        'pipeline_tasks.title ILIKE :q OR COALESCE(pipeline_tasks.description, \'\') ILIKE :q',
+        q: q
+      )
+    end
+
+    if params[:open] == 'true'
+      scope = scope.where(status: %i[pending overdue])
+    end
+
+    scope
+  end
 
   def find_conversation(ref)
     Conversation.find_by(id: ref) || Conversation.find_by(display_id: ref)

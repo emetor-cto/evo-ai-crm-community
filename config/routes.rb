@@ -577,6 +577,7 @@ Rails.application.routes.draw do
       end
 
       post 'pipeline_tasks/for_conversation', to: 'pipeline_tasks#for_conversation'
+      resources :pipeline_tasks, only: [:index], controller: 'pipeline_tasks'
 
       resources :pipeline_task_templates, only: [:index, :show, :create, :update, :destroy],
                                          controller: 'pipeline_task_templates'

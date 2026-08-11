@@ -753,7 +753,12 @@ class Api::V1::PipelineItemsController < Api::V1::BaseController
     tasks = PipelineTask.where(status: %i[pending overdue]).where.not(due_date: nil)
     tasks = case params[:reminder]
             when 'upcoming'
-              tasks.where(due_date: Time.zone.now.beginning_of_day..(Time.zone.now + 7.days).end_of_day)
+              # Next 7 calendar days after today (aligned with pipelines#reminders).
+              tasks.where(
+                'DATE(due_date) > :today AND DATE(due_date) <= :until_date',
+                today: Date.current,
+                until_date: Date.current + 7.days
+              )
             else
               tasks.where(
                 'DATE(due_date) = :today OR (status = :overdue AND DATE(due_date) <= :today)',

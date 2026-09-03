@@ -3,6 +3,7 @@ class Api::V1::Conversations::MessagesController < Api::V1::Conversations::BaseC
 
   def index
     @messages = message_finder.perform
+    preload_message_sender_avatars(@messages)
 
     success_response(
       data: MessageSerializer.serialize_collection(@messages, include_attachments: true, include_sender: true),
@@ -126,13 +127,28 @@ class Api::V1::Conversations::MessagesController < Api::V1::Conversations::BaseC
     @message_finder ||= MessageFinder.new(@conversation, params, includes: message_includes)
   end
 
+  # Preload ActiveStorage graphs used by MessageSerializer (file_url / thumb_url /
+  # avatar_url). Without this, each attachment and sender avatar triggers N+1
+  # queries + variant lookups while serializing the page of messages.
   def message_includes
     @message_includes ||= [
       :sender,
-      :conversation,
-      :inbox,
-      :attachments
+      { attachments: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } } }
     ]
+  end
+
+  def preload_message_sender_avatars(messages)
+    senders = Array(messages).filter_map(&:sender).uniq
+    return if senders.empty?
+
+    senders.group_by(&:class).each_value do |records|
+      ActiveRecord::Associations::Preloader.new(
+        records: records,
+        associations: [
+          { avatar_attachment: { blob: { variant_records: { image_attachment: :blob } } } }
+        ]
+      ).call
+    end
   end
 
   def permitted_params

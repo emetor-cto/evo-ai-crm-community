@@ -41,14 +41,15 @@ class MessageFinder
         query.reorder(created_at: :asc).limit(limit).to_a
       end
 
-    # Carregar attachments se não foram incluídos
-    unless @includes&.include?(:attachments)
+    # Carregar attachments se não foram incluídos (inclui nested hash preload)
+    unless attachments_included?
       message_ids = messages.map(&:id)
       attachments_by_message = Attachment.where(attachable_type: 'Message', attachable_id: message_ids)
+                                         .includes(file_attachment: { blob: { variant_records: { image_attachment: :blob } } })
                                          .group_by(&:attachable_id)
 
       messages.each do |message|
-        message.attachments = attachments_by_message[message.id] || []
+        message.association(:attachments).target = attachments_by_message[message.id] || []
       end
     end
 
@@ -56,6 +57,14 @@ class MessageFinder
   end
 
   private
+
+  def attachments_included?
+    return false if @includes.blank?
+
+    Array(@includes).any? do |inc|
+      inc == :attachments || (inc.is_a?(Hash) && inc.key?(:attachments))
+    end
+  end
 
   def limit_for_params
     return 1000 if @params[:after].present? && @params[:before].present?

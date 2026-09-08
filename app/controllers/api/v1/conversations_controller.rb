@@ -295,13 +295,10 @@ class Api::V1::ConversationsController < Api::V1::BaseController
       Conversation.all, Current.user
     ).perform
 
-    incoming_type = Message.message_types[:incoming]
-    total = accessible
-            .joins(:messages)
-            .where(messages: { message_type: incoming_type })
-            .where('messages.created_at > COALESCE(conversations.agent_last_seen_at, to_timestamp(0))')
-            .distinct
-            .count('conversations.id')
+    # EXISTS per conversation (Conversation.unread) instead of JOIN+DISTINCT on
+    # the whole messages table — the join scanned every incoming message and
+    # saturated Puma so the Chat page (and even /global_config) timed out.
+    total = accessible.unread.count
 
     success_response(
       data: { unread_count: total },

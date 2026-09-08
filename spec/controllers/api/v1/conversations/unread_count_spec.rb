@@ -17,11 +17,8 @@ RSpec.describe Api::V1::ConversationsController, type: :controller do
     let(:user) { instance_double(User, role: 'agent') }
     let(:base_conversations) { double('ConversationsRelation') }
     let(:permitted_conversations) { double('PermittedRelation') }
+    let(:unread_conversations) { double('UnreadRelation') }
     let(:filter_service) { instance_double(Conversations::PermissionFilterService, perform: permitted_conversations) }
-    let(:joined) { double('Joined') }
-    let(:incoming_filtered) { double('IncomingFiltered') }
-    let(:since_filtered) { double('SinceFiltered') }
-    let(:distinct_filtered) { double('DistinctFiltered') }
 
     before do
       allow(Current).to receive(:user).and_return(user)
@@ -29,15 +26,8 @@ RSpec.describe Api::V1::ConversationsController, type: :controller do
       allow(Conversations::PermissionFilterService).to receive(:new)
         .with(base_conversations, user).and_return(filter_service)
 
-      allow(permitted_conversations).to receive(:joins).with(:messages).and_return(joined)
-      allow(joined).to receive(:where)
-        .with(messages: { message_type: Message.message_types[:incoming] })
-        .and_return(incoming_filtered)
-      allow(incoming_filtered).to receive(:where)
-        .with('messages.created_at > COALESCE(conversations.agent_last_seen_at, to_timestamp(0))')
-        .and_return(since_filtered)
-      allow(since_filtered).to receive(:distinct).and_return(distinct_filtered)
-      allow(distinct_filtered).to receive(:count).with('conversations.id').and_return(17)
+      allow(permitted_conversations).to receive(:unread).and_return(unread_conversations)
+      allow(unread_conversations).to receive(:count).and_return(17)
     end
 
     it 'returns the number of conversations with at least one unread incoming message' do
@@ -51,6 +41,13 @@ RSpec.describe Api::V1::ConversationsController, type: :controller do
       allow(controller).to receive(:success_response)
       controller.send(:unread_count)
       expect(Conversations::PermissionFilterService).to have_received(:new).with(base_conversations, user)
+    end
+
+    it 'counts via Conversation.unread rather than joining all messages' do
+      allow(controller).to receive(:success_response)
+      expect(permitted_conversations).not_to receive(:joins)
+      controller.send(:unread_count)
+      expect(permitted_conversations).to have_received(:unread)
     end
   end
 end

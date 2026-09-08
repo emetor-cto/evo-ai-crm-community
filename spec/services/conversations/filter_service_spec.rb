@@ -81,4 +81,28 @@ RSpec.describe Conversations::FilterService do
       service.send(:query_builder, {})
     end
   end
+
+  describe '#base_relation' do
+    it 'preloads list associations and does not preload message history' do
+      user = instance_double(User)
+      service = described_class.new({}, user)
+      relation = double('Relation')
+      permission_service = instance_double(Conversations::PermissionFilterService, perform: relation)
+
+      expect(Conversation).to receive(:joins).with(:contact).and_return(relation)
+      expect(relation).to receive(:joins).with(:inbox).and_return(relation)
+      expect(relation).to receive(:preload).with(
+        { inbox: :agent_bot_inbox },
+        :contact,
+        :assignee,
+        :team,
+        :contact_inbox,
+        pipeline_items: [:pipeline, :pipeline_stage, :stage_movements]
+      ).and_return(relation)
+      expect(Conversations::PermissionFilterService).to receive(:new)
+        .with(relation, user).and_return(permission_service)
+
+      expect(service.send(:base_relation)).to eq(relation)
+    end
+  end
 end

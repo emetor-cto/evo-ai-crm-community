@@ -26,14 +26,16 @@ class Conversations::FilterService < FilterService
     conversations = Conversation
                             .joins(:contact)  # Filter out conversations without contacts
                             .joins(:inbox)    # JOIN inboxes for channel_type filtering
+                            # Do NOT preload messages/attachments here. The Chat page always
+                            # loads via filter, include_messages is false, and last/unread
+                            # messages are fetched with targeted SQL in the controller.
+                            # Preloading the full history per row blocked Puma in production.
                             .preload(
-                              :inbox,
+                              { inbox: :agent_bot_inbox },
                               :contact,
                               :assignee,
                               :team,
                               :contact_inbox,
-                              :taggings,
-                              messages: { attachments: { file_attachment: :blob } },
                               pipeline_items: [:pipeline, :pipeline_stage, :stage_movements]
                             )
 
